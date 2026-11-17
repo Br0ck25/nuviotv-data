@@ -1,0 +1,177 @@
+name: Nuvio data
+
+# One workflow for the nuvio-data repo:
+#  - Upload nuvio-data.zip to the repo: it's unpacked (scripts, README), the zip is deleted,
+#    and everything is updated straight away.
+#  - Every day (and when you press Run workflow): the full update. Every league in leagues.txt
+#    (fixtures, results, events, teams, tables) from TheSportsDB, into the sportsdb folder.
+#    To add a sport or league, add a line to leagues.txt: nothing else needs changing.
+#  - Every 5 minutes: scores for games that are on, and the details (goals, stats, line-ups) of
+#    games on now or just finished, into sportsdb/games. A run with no games on asks TheSportsDB
+#    nothing. The livetv-cloud Worker starts this every 5 minutes (Run workflow with mode
+#    "scores"), because GitHub's own 5-minute schedule is often skipped for hours.
+#  - The old wrestling.json and football folder are still made for people on older versions of
+#    the app. Once everyone has the new version, the two "older app versions" steps can go.
+on:
+  push:
+    paths:
+      - "nuvio-data.zip"
+  schedule:
+    - cron: "17 9 * * *"           # full update: 9:17 UTC every day
+    - cron: "*/5 * * * *"          # scores: every 5 minutes (a run with no games on does almost nothing)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full = everything; scores = only games on now"
+        type: choice
+        options: [full, scores]
+        default: full
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nuvio-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Scheduled runs other than the daily one only update scores.
+      MODE: ${{ (inputs.mode == 'scores' || (github.event_name == 'schedule' && github.event.schedule != '17 9 * * *')) && 'scores' || 'full' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack nuvio-data.zip (when one was uploaded)
+        id: unpack
+        run: |
+          if [ ! -f nuvio-data.zip ]; then
+            echo "No zip to unpack."
+            echo "unpacked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Workflow files can't be changed by a workflow, so anything under .github is skipped
+          # (this file is the only one the repo needs).
+          unzip -o nuvio-data.zip -x ".github/*" "__MACOSX/*" "*.DS_Store"
+          git rm -q --cached nuvio-data.zip || true
+          rm -f nuvio-data.zip
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Unpack nuvio-data.zip"
+          git push
+          echo "unpacked=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        if: github.event_name != 'push' || steps.unpack.outputs.unpacked == 'true'
+        with:
+          python-version: "3.12"
+
+      # Where the files are kept between runs (scripts/state.sh): in this repo, or, when the repo
+      # variable PUBLIC_FILES is "off", only in the R2 bucket. Does nothing while they are here.
+      - name: Get the saved files
+        id: state
+        if: github.event_name != 'push' || steps.unpack.outputs.unpacked == 'true'
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          PUBLIC_FILES: ${{ vars.PUBLIC_FILES }}
+        run: bash scripts/state.sh get tsdb
+
+      - name: All sports in leagues.txt, from TheSportsDB
+        if: github.event_name != 'push' || steps.unpack.outputs.unpacked == 'true'
+        env:
+          # Your paid TheSportsDB key (Settings > Secrets and variables > Actions > Secrets).
+          TSDB_KEY: ${{ secrets.TSDB_KEY }}
+        run: |
+          if [ ! -f scripts/sportsdb.py ]; then
+            echo "scripts/sportsdb.py is missing: upload nuvio-data.zip first."
+            exit 0
+          fi
+          if [ "$MODE" = "scores" ]; then python scripts/sportsdb.py --scores; else python scripts/sportsdb.py; fi
+
+      - name: Players of the teams in players.txt, from TheSportsDB
+        if: env.MODE == 'full' && (github.event_name != 'push' || steps.unpack.outputs.unpacked == 'true')
+        continue-on-error: true
+        env:
+          TSDB_KEY: ${{ secrets.TSDB_KEY }}
+        run: |
+          if [ ! -f scripts/players.py ]; then
+            echo "scripts/players.py is missing: upload nuvio-data.zip first."
+            exit 0
+          fi
+          python scripts/players.py
+
+      - name: Older app versions - wrestling schedule
+        if: env.MODE == 'full' && (github.event_name != 'push' || steps.unpack.outputs.unpacked == 'true')
+        env:
+          # Optional: a paid TheSportsDB key (Settings > Secrets and variables > Actions > Secrets).
+          TSDB_KEY: ${{ secrets.TSDB_KEY }}
+          # Optional: leagues whose logo licence you've checked, e.g. "wwe,aew" (… > Variables).
+          WRESTLING_LOGOS: ${{ vars.WRESTLING_LOGOS }}
+          # Optional: league ids to add, e.g. "aew=1234,tna=5678" (… > Variables).
+          WRESTLING_LEAGUES: ${{ vars.WRESTLING_LEAGUES }}
+        run: |
+          if [ ! -f scripts/wrestling.py ]; then
+            echo "scripts/wrestling.py is missing: upload nuvio-data.zip first."
+            exit 1
+          fi
+          python scripts/wrestling.py
+
+      - name: Older app versions - non-league football and other sports
+        if: github.event_name != 'push' || steps.unpack.outputs.unpacked == 'true'
+        env:
+          TSDB_KEY: ${{ secrets.TSDB_KEY }}
+          # Optional: extra or skipped league ids, and leagues whose club badges you've checked.
+          FOOTBALL_LEAGUES: ${{ vars.FOOTBALL_LEAGUES }}
+          FOOTBALL_SKIP: ${{ vars.FOOTBALL_SKIP }}
+          # Optional: other-sport league ids to leave out (… > Variables).
+          OTHER_SKIP: ${{ vars.OTHER_SKIP }}
+          # Set to "on" (… > Variables) once the TheSportsDB check looks good, and the new app is out.
+          OTHER_SPORTS: ${{ vars.OTHER_SPORTS }}
+          FOOTBALL_LOGOS: ${{ vars.FOOTBALL_LOGOS }}
+        run: |
+          if [ ! -f scripts/football.py ]; then
+            echo "scripts/football.py is missing: upload nuvio-data.zip first."
+            exit 0
+          fi
+          if [ "$MODE" = "scores" ]; then python scripts/football.py --scores; else python scripts/football.py; fi
+
+      - name: Save what changed
+        if: github.event_name != 'push' || steps.unpack.outputs.unpacked == 'true'
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          PUBLIC_FILES: ${{ vars.PUBLIC_FILES }}
+        run: |
+          # PUBLIC_FILES off: only wrestling.json is saved in this repo (scripts/state.sh).
+          if [ "${{ steps.state.outputs.private }}" = "true" ]; then
+            bash scripts/state.sh put tsdb
+            exit 0
+          fi
+          for p in sportsdb wrestling.json football; do if [ -e "$p" ]; then git add -A "$p"; fi; done
+          if git diff --cached --quiet; then
+            echo "No changes to save."
+            exit 0
+          fi
+          # Also copy the changed files to the R2 bucket our apps read them from.
+          bash scripts/r2-upload.sh changed
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$MODE" = "scores" ]; then git commit -q -m "Scores"; else git commit -q -m "Schedule update"; fi
+          # Both jobs save to this repo every few minutes and both write sportsdb/4546.json
+          # (EuroLeague), so if another run saved in the meantime, keep this run's (newer) copy
+          # instead of stopping on a clash, and try again if the other run got its save in first.
+          for try in 1 2 3 4 5; do
+            git pull --rebase -X theirs -q || { git rebase --abort 2>/dev/null || true; }
+            if git push -q; then exit 0; fi
+            sleep $((try * 4))
+          done
+          echo "::error::Could not save after 5 tries."
+          exit 1

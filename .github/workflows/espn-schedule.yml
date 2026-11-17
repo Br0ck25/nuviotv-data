@@ -1,0 +1,178 @@
+name: ESPN shared schedule cache
+
+# A new, separate job from nuvio-data.yml: it never touches TheSportsDB or the files that job
+# writes, so it can't break anything the existing job (or an older app version) depends on.
+#
+# Every 5 minutes, the livetv-cloud Worker asks ESPN for yesterday-to-a-week-ahead's scoreboard for
+# every league in espn-leagues.txt, saves the raw answers to the R2 bucket (espn/*.json), then
+# starts this job. This job gets those files, makes the ready-made ones and keeps a copy here for
+# older apps. If the Worker's last round is missing, old or went badly, this job asks ESPN itself
+# (scripts/espn.py), as it always did. The files are shared by every installed copy of the app. The app reads these files first and only asks ESPN directly itself for a
+# league this cache doesn't have yet, or a live game it needs sooner than this cache refreshes.
+#
+# To add a league: add a line to espn-leagues.txt ("<app league id>|<ESPN path>|<extra query
+# string, or blank>"). Leagues the app routes through HockeyTech, the MLB Stats API or ESPN's
+# cricket score panel aren't listed here on purpose (see espn-leagues.txt's own notes).
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: espn-schedule
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Start from the newest saved files, not the copy from when this run was triggered: a run
+      # that waited behind a slow one would otherwise start from stale files and clash on saving.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Where the files are kept between runs (scripts/state.sh): in this repo, or, when the repo
+      # variable PUBLIC_FILES is "off", only in the R2 bucket. Does nothing while they are here.
+      - name: Get the saved files
+        id: state
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          PUBLIC_FILES: ${{ vars.PUBLIC_FILES }}
+        run: bash scripts/state.sh get espn
+
+      - name: Get the scores the Worker saved
+        id: r2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+        run: bash scripts/r2-espn-get.sh
+
+      - name: Fetch ESPN's scoreboard for every listed league
+        if: steps.r2.outputs.worker != 'true'
+        run: python scripts/espn.py
+
+      # EuroLeague's live scores from the league's own feed (TheSportsDB's live feed doesn't
+      # cover it). Asks nothing when no game is near; a failure leaves the file as it was.
+      - name: EuroLeague live scores
+        continue-on-error: true
+        run: python scripts/euroleague.py
+
+      # Ready-made score files (espn/compact): the same games, already read by the app's own
+      # code, one small file per league plus an index, so each TV only downloads what changed.
+      # If anything here fails, the raw files above are still saved as before.
+      - name: Get the app's Sports code (NuvioPlusIPTV, dev)
+        id: appsrc
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: homelessbrian/NuvioPlusIPTV
+          ref: dev
+          path: app-src
+          sparse-checkout: |
+            app/src/main/java/com/nuvio/tv/livetv/sports
+            app/src/main/java/com/nuvio/tv/livetv/model
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-java@v4
+        if: steps.appsrc.outcome == 'success'
+        continue-on-error: true
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Restored here, and saved further down only once a build has worked: a failed build was
+      # saved before, and every later run reused that empty copy without building again.
+      - name: Reuse the built score-file maker
+        id: maker
+        if: steps.appsrc.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: maker
+          key: compact-maker-${{ hashFiles('app-src/app/src/main/java/com/nuvio/tv/livetv/sports/SportsModels.kt', 'app-src/app/src/main/java/com/nuvio/tv/livetv/sports/SportsCatalog.kt', 'app-src/app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeeds.kt', 'app-src/app/src/main/java/com/nuvio/tv/livetv/sports/SportsFeedCache.kt', 'app-src/app/src/main/java/com/nuvio/tv/livetv/sports/SportsEventCodec.kt', 'app-src/app/src/main/java/com/nuvio/tv/livetv/model/LiveTvModels.kt', 'compact/**', 'check/stubs/**') }}
+
+      - name: Build the score-file maker
+        id: build
+        if: steps.appsrc.outcome == 'success' && (steps.maker.outputs.cache-hit != 'true' || hashFiles('maker/out/**') == '')
+        continue-on-error: true
+        run: |
+          rm -rf maker
+          curl -sSL -o kotlin.zip https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip
+          unzip -q kotlin.zip
+          mkdir -p maker
+          curl -sSL -o maker/json.jar https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
+          curl -sSL -o maker/coroutines.jar https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.1/kotlinx-coroutines-core-jvm-1.8.1.jar
+          cp kotlinc/lib/kotlin-stdlib.jar maker/
+          L=app-src/app/src/main/java/com/nuvio/tv/livetv
+          kotlinc/bin/kotlinc -nowarn -cp maker/json.jar:maker/coroutines.jar \
+            check/stubs/*.kt $L/model/LiveTvModels.kt \
+            $L/sports/SportsModels.kt $L/sports/SportsCatalog.kt $L/sports/SportsFeeds.kt $L/sports/SportsFeedCache.kt $L/sports/SportsEventCodec.kt \
+            compact/Compact.kt -d maker/out
+          rm -rf kotlinc kotlin.zip
+          test -f maker/out/com/nuvio/tv/livetv/sports/CompactKt.class
+
+      - name: Keep the built score-file maker for the next runs
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: maker
+          key: ${{ steps.maker.outputs.cache-primary-key }}
+
+      - name: Make the ready-made score files
+        if: steps.appsrc.outcome == 'success'
+        continue-on-error: true
+        run: |
+          test -d maker/out
+          java -cp maker/out:maker/json.jar:maker/coroutines.jar:maker/kotlin-stdlib.jar com.nuvio.tv.livetv.sports.CompactKt espn
+
+      - name: Save what changed
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          # When the Worker saved the league files to R2 itself, only the ready-made files and
+          # EuroLeague's go up from here.
+          R2_WANTED: ${{ steps.r2.outputs.worker == 'true' && '^(espn/compact|sportsdb)/.*\.json$' || '' }}
+          PUBLIC_FILES: ${{ vars.PUBLIC_FILES }}
+        run: |
+          # PUBLIC_FILES off: nothing is saved in this repo (scripts/state.sh).
+          if [ "${{ steps.state.outputs.private }}" = "true" ]; then
+            bash scripts/state.sh put espn
+            exit 0
+          fi
+          git add -A espn sportsdb/4546.json
+          if git diff --cached --quiet; then
+            echo "No changes to save."
+            exit 0
+          fi
+          # Also copy the changed files to the R2 bucket our apps read them from.
+          bash scripts/r2-upload.sh changed
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "ESPN schedule cache"
+          # Both jobs save to this repo every few minutes and both write sportsdb/4546.json
+          # (EuroLeague), so if another run saved in the meantime, keep this run's (newer) copy
+          # instead of stopping on a clash, and try again if the other run got its save in first.
+          for try in 1 2 3 4 5; do
+            git pull --rebase -X theirs -q || { git rebase --abort 2>/dev/null || true; }
+            if git push -q; then exit 0; fi
+            sleep $((try * 4))
+          done
+          echo "::error::Could not save after 5 tries."
+          exit 1
