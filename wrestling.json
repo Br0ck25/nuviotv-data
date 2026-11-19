@@ -1,8 +1,8 @@
 {
  "source": "TheSportsDB (thesportsdb.com)",
  "window": {
-  "from": "2026-11-16",
-  "to": "2026-12-01"
+  "from": "2026-11-18",
+  "to": "2026-12-03"
  },
  "leagues": [
   {
@@ -14,17 +14,6 @@
   }
  ],
  "events": [
-  {
-   "id": "2624418",
-   "league": "wwe",
-   "name": "RAW #1747",
-   "start": "2026-11-17T01:00:00Z",
-   "hasTime": true,
-   "venue": "Lenovo Center",
-   "city": "Raleigh, North Carolina",
-   "country": "United States",
-   "about": null
-  },
   {
    "id": "2624419",
    "league": "wwe",
@@ -81,5 +70,5 @@
    "about": null
   }
  ],
- "generated": "2026-11-17T23:42:05Z"
+ "generated": "2026-11-19T18:18:58Z"
 }
