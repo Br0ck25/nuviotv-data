@@ -1,8 +1,8 @@
 {
  "source": "TheSportsDB (thesportsdb.com)",
  "window": {
-  "from": "2026-11-22",
-  "to": "2026-12-07"
+  "from": "2026-11-23",
+  "to": "2026-12-08"
  },
  "leagues": [
   {
@@ -18,12 +18,12 @@
    "id": "2624421",
    "league": "wwe",
    "name": "RAW #1748",
-   "start": "2026-11-24T00:00:00Z",
+   "start": "2026-11-23T23:00:00Z",
    "hasTime": true,
    "venue": "Intrust Bank Arena",
    "city": "Wichita, Kansas",
    "country": "United States",
-   "about": null
+   "about": "WWE Intercontinental Title Match Ethan Page (c) vs. Rey Fenix Tag Team Match El Grande Americano & Rey Mysterio vs. The Judgment Day (Dominik Mysterio & JD McDonagh) Singles Match Lyra Valkyria vs. Sol Ruca Tag Team Match Bayley & Stephanie Vaquer vs. Fatal Influence (Fallon Henley & Lainey Reid) (w/Jacy Jayne)"
   },
   {
    "id": "2624420",
@@ -68,7 +68,18 @@
    "city": "Grand Rapids, Michigan",
    "country": "United States",
    "about": null
+  },
+  {
+   "id": "2624424",
+   "league": "wwe",
+   "name": "RAW #1750",
+   "start": "2026-12-08T00:00:00Z",
+   "hasTime": true,
+   "venue": "Huntington Center",
+   "city": "Toledo, Ohio",
+   "country": "United States",
+   "about": null
   }
  ],
- "generated": "2026-11-23T21:23:00Z"
+ "generated": "2026-11-24T20:12:07Z"
 }
