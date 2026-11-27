@@ -1,8 +1,8 @@
 {
  "source": "TheSportsDB (thesportsdb.com)",
  "window": {
-  "from": "2026-11-24",
-  "to": "2026-12-09"
+  "from": "2026-11-26",
+  "to": "2026-12-11"
  },
  "leagues": [
   {
@@ -15,21 +15,10 @@
  ],
  "events": [
   {
-   "id": "2631290",
-   "league": "wwe",
-   "name": "NXT #865",
-   "start": "2026-11-25T01:00:00Z",
-   "hasTime": true,
-   "venue": "WWE Performance Center",
-   "city": "Orlando, Florida",
-   "country": "United States",
-   "about": "Dark Match Brooks Jensen vs. El Fiscal Dark Match Andi Summers vs. Lizzy Rain Eight Man Tag Team Match Hank And Tank (Hank Walker & Tank Ledger), Noam Dar & Romeo Moreno vs. The Vanity Project (Brad Baylor, Jackson Drake, Myka Lockwood & Ricky Smokes) WWE NXT Title #1 Contendership Match Mason Rook vs."
-  },
-  {
    "id": "2624420",
    "league": "wwe",
    "name": "SmackDown #1423",
-   "start": "2026-11-27T00:00:00Z",
+   "start": "2026-11-27T01:00:00Z",
    "hasTime": true,
    "venue": "Intrust Bank Arena",
    "city": "Wichita, Kansas",
@@ -45,7 +34,18 @@
    "venue": "Daikin Park",
    "city": "Houston, Texas",
    "country": "United States",
-   "about": "WWE Survivor Series: WarGames returns with two major WarGames matches at Daikin Park in Houston. Roman Reigns leads The Bloodline against The 946 in the men’s match, while Charlotte Flair, Stephanie Vaquer, Alexa Bliss, Tatum Paxley and Bayley unite for the women’s WarGames showdown."
+   "about": "Survivor Series Elimination Ten Man Tag Team Match Team Mexico (Dragon Lee, El Grande Americano, Penta, Rey Fenix & Rey Mysterio) vs. Team USA (CM Punk, Cody Rhodes, Je'Von Evans, LA Knight & Seth Rollins)), (WWE Women's World Title Match Liv Morgan (c) vs. Becky Lynch WarGames Ten Man Tag Team Match Alexa Bliss, Bayley, Charlotte Flair, Stephanie Vaquer & Tatum Paxley vs."
+  },
+  {
+   "id": "2632488",
+   "league": "wwe",
+   "name": "NXT #866",
+   "start": "2026-12-01T00:00:00Z",
+   "hasTime": true,
+   "venue": "WWE Performance Center",
+   "city": "Orlando, Florida",
+   "country": "United States",
+   "about": "Singles Match Tony D'Angelo vs. Myles Borne Singles Match Sean Legacy vs. Saquon Shugars Triple Threat Match Daga vs. Lexis King vs. Dion Lennox WWE NXT North American Title #1 Contendership Fatal Four Way Match EK Prosper vs. Zilla Fatu vs. Kam Hendrix vs. Tristan Angels"
   },
   {
    "id": "2624422",
@@ -56,7 +56,7 @@
    "venue": "Simmons Bank Arena",
    "city": "North Little Rock, Arkansas",
    "country": "United States",
-   "about": null
+   "about": "Singles Match Big Cass vs. Chad Gable"
   },
   {
    "id": "2624423",
@@ -79,7 +79,18 @@
    "city": "Toledo, Ohio",
    "country": "United States",
    "about": null
+  },
+  {
+   "id": "2624425",
+   "league": "wwe",
+   "name": "SmackDown #1425",
+   "start": "2026-12-11T00:00:00Z",
+   "hasTime": true,
+   "venue": "RAC Arena",
+   "city": "Perth, Western Australia",
+   "country": "Australia",
+   "about": null
   }
  ],
- "generated": "2026-11-25T19:18:38Z"
+ "generated": "2026-11-27T19:00:26Z"
 }
