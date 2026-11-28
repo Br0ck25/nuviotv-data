@@ -1,8 +1,8 @@
 {
  "source": "TheSportsDB (thesportsdb.com)",
  "window": {
-  "from": "2026-11-26",
-  "to": "2026-12-11"
+  "from": "2026-11-27",
+  "to": "2026-12-12"
  },
  "leagues": [
   {
@@ -90,7 +90,18 @@
    "city": "Perth, Western Australia",
    "country": "Australia",
    "about": null
+  },
+  {
+   "id": "2599797",
+   "league": "wwe",
+   "name": "Wrestlepalooza",
+   "start": "2026-12-12T00:00:00Z",
+   "hasTime": true,
+   "venue": "RAC Arena",
+   "city": "Perth, Western Australia",
+   "country": "Australia",
+   "about": null
   }
  ],
- "generated": "2026-11-27T19:00:26Z"
+ "generated": "2026-11-28T17:34:58Z"
 }
